@@ -20,6 +20,14 @@ def main():
 @click.option('--private-token', help='A GitLab private access token.')
 def cli(project_id, source_branch, target_branch,
     url=None, private_token=None):
+    """Diff two branches in a given project and output whether their content
+    differs.
+
+    In addition to command line flags, you can configure this tool via
+    environment variables by using the long-form arguments, making them
+    uppercase, prefixing them with `APP_`, and using underscores `_` as
+    separators. E.g. `--private-token` becomes `APP_PRIVATE_TOKEN`.
+    """
 
     logging.basicConfig(level=logging.INFO)
 
