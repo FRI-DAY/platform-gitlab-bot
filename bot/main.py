@@ -41,7 +41,26 @@ def cli(project_id, source_branch, target_branch,
         gl = gitlab.Gitlab.from_config()
 
     project = gl.projects.get(project_id)
-    comparison = project.repository_compare(source_branch, target_branch)
-    diff_has_content = len(comparison['diffs']) > 0
+
+    existing_mr = existing_merge_request(project, source_branch, target_branch)
+    if existing_mr is not None:
+        log.info('Merge request already exists, stopping. MR: {0}',
+                 existing_mr.web_url)
+        return
+
+    branch_content_differs = does_branch_content_differ(
+        project, source_branch, target_branch)
     log.info('Branches {0} and {1} differ: {2}'.format(
-        source_branch, target_branch, diff_has_content))
+        source_branch, target_branch, branch_content_differs))
+
+
+def does_branch_content_differ(project, source, target):
+    comparison = project.repository_compare(source, target)
+    return len(comparison['diffs']) > 0
+
+
+def existing_merge_request(project, source, target):
+    existing = project.mergerequests.list(
+        state='opened', source_branch=source, target_branch=target)
+
+    return existing[0] if existing else None
