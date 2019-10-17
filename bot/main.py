@@ -2,6 +2,9 @@ import logging
 
 import click
 import gitlab
+from aiohttp import web
+
+from bot.branch_promotion import BranchPromoter
 
 log = logging.getLogger(__name__)
 
@@ -11,6 +14,8 @@ def main():
 
 
 @click.command()
+@click.option('--server/--no-server', '-d', default=False,
+              help='Run an HTTP server receiving webhooks')
 @click.option(
     '--project-id', '-p', required=True, type=int,
     help='The numeric id of the GitLab project to work on.')
@@ -23,7 +28,7 @@ def main():
               help='Label to attach to created MRs (multiple allowed).')
 @click.option('--url', help='The GitLab instance URL.')
 @click.option('--private-token', help='A GitLab private access token.')
-def cli(project_id, source_branch, target_branch, labels,
+def cli(server, project_id, source_branch, target_branch, labels,
         url=None, private_token=None):
     """Diff two branches in a given project and output whether their content
     differs.
@@ -42,40 +47,29 @@ def cli(project_id, source_branch, target_branch, labels,
         log.info('Using python-gitlab config file')
         gl = gitlab.Gitlab.from_config()
 
-    project = gl.projects.get(project_id)
+    promoter = BranchPromoter(gl)
 
-    existing_mr = existing_merge_request(project, source_branch, target_branch)
-    if existing_mr is not None:
-        log.info('{0} -> {1}: Merge request already exists, stopping. '
-                 'MR: {2}'.format(
-                    source_branch, target_branch, existing_mr.web_url))
-        return
-
-    branch_content_differs = does_branch_content_differ(
-        project, source_branch, target_branch)
-    if not branch_content_differs:
-        log.info('{0} -> {1}: Branch contents are the same, stopping.'.format(
-                 source_branch, target_branch))
-        return
-
-    mr_title = '⛵️ {0} to {1}'.format(source_branch, target_branch)
-    created_mr = project.mergerequests.create({
-        'source_branch': source_branch,
-        'target_branch': target_branch,
-        'title': mr_title,
-        'labels': labels})
-
-    log.info('{0} -> {1}: Created MR: {2}'.format(
-             source_branch, target_branch, created_mr.web_url))
+    if server:
+        run_server(promoter, project_id, source_branch, target_branch, labels)
+    else:
+        promoter.create_merge_request(
+            project_id, source_branch, target_branch, labels)
 
 
-def does_branch_content_differ(project, source, target):
-    comparison = project.repository_compare(source, target)
-    return len(comparison['diffs']) > 0
+def run_server(promoter, project_id, source_branch, target_branch, labels):
+    promote_branch_handler = create_promote_branch_handler(
+        promoter, project_id, source_branch, target_branch, labels)
+
+    app = web.Application()
+    app.add_routes([web.post('/', promote_branch_handler)])
+    web.run_app(app)
 
 
-def existing_merge_request(project, source, target):
-    existing = project.mergerequests.list(
-        state='opened', source_branch=source, target_branch=target)
+def create_promote_branch_handler(
+        promoter, project_id, source_branch, target_branch, labels):
 
-    return existing[0] if existing else None
+    async def handle_promote_branch(request):
+        promoter.create_merge_request(
+            project_id, source_branch, target_branch, labels)
+        return web.Response(text='Done.')
+    return handle_promote_branch

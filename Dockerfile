@@ -23,3 +23,13 @@ FROM base AS dev
 RUN pipenv install --system --dev
 
 COPY . .
+
+##########
+
+# Put the prod image last so when someone builds it without --target, it's the
+# prod one by default.
+FROM base AS prod
+
+# We don't want this in base, because a change in code would trigger the whole
+# build process for other images (i.e., installing dependencies for dev)
+COPY . .
