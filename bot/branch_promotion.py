@@ -2,11 +2,13 @@ import logging
 
 import gitlab
 
+from bot.config import load_from_yaml as load_config_from_yaml
+
 log = logging.getLogger(__name__)
 
 
 class BranchPromoter(object):
-    CONFIG_FILENAME = 'gitlab-bot.json'
+    CONFIG_FILENAME = 'gitlab-bot.yml'
 
     def __init__(self, gl):
         self.gl = gl
@@ -20,8 +22,8 @@ class BranchPromoter(object):
                  project.path_with_namespace, project.default_branch))
 
         try:
-            project.files.get(file_path=self.CONFIG_FILENAME,
-                              ref=project.default_branch)
+            config_file = project.files.get(file_path=self.CONFIG_FILENAME,
+                                            ref=project.default_branch)
         except gitlab.GitlabGetError as e:
             if e.response_code == 404:
                 log.info('{0}: "{1}" not found in '
@@ -31,6 +33,10 @@ class BranchPromoter(object):
                 return
 
             raise e
+
+        load_config_from_yaml(config_file.decode())
+
+        # TODO use returned config
 
         log.info('{0}: Using "{1}" found in '
                  'default branch "{2}"'.format(
