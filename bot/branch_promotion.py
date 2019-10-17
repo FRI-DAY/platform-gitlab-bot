@@ -38,7 +38,10 @@ class BranchPromoter(object):
                  source_branch, target_branch, created_mr.web_url))
 
     def does_branch_content_differ(self, project, source, target):
-        comparison = project.repository_compare(source, target)
+        # It's quite unintuitive, but what we want is
+        # `git diff target...source`. We want the changes that happened on
+        # source since target was branched off source.
+        comparison = project.repository_compare(target, source)
         return len(comparison['diffs']) > 0
 
     def existing_merge_request(self, project, source, target):
