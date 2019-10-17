@@ -1,9 +1,13 @@
 import logging
 
+import gitlab
+
 log = logging.getLogger(__name__)
 
 
 class BranchPromoter(object):
+    CONFIG_FILENAME = 'gitlab-bot.json'
+
     def __init__(self, gl):
         self.gl = gl
 
@@ -11,6 +15,27 @@ class BranchPromoter(object):
             self, project_id, source_branch, target_branch, labels):
 
         project = self.gl.projects.get(project_id)
+
+        log.info('Processing "{0}" with default branch "{1}"'.format(
+                 project.path_with_namespace, project.default_branch))
+
+        try:
+            project.files.get(file_path=self.CONFIG_FILENAME,
+                              ref=project.default_branch)
+        except gitlab.GitlabGetError as e:
+            if e.response_code == 404:
+                log.info('{0}: "{1}" not found in '
+                         'default branch "{2}", stopping.'.format(
+                            project.path_with_namespace, self.CONFIG_FILENAME,
+                            project.default_branch))
+                return
+
+            raise e
+
+        log.info('{0}: Using "{1}" found in '
+                 'default branch "{2}"'.format(
+                    project.path_with_namespace, self.CONFIG_FILENAME,
+                    project.default_branch))
 
         existing_mr = self.existing_merge_request(
             project, source_branch, target_branch)
