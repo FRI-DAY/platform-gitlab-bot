@@ -2,9 +2,9 @@ import logging
 
 import click
 import gitlab
-from aiohttp import web
 
 from bot.runner import Runner
+from bot.server import Server
 
 log = logging.getLogger(__name__)
 
@@ -42,21 +42,6 @@ def cli(server, project_id, url=None, private_token=None):
     runner = Runner(gl)
 
     if server:
-        run_server(runner, project_id)
+        Server(runner).run()
     else:
         runner.run(project_id)
-
-
-def run_server(runner, project_id):
-    run_handler = create_run_handler(runner, project_id)
-
-    app = web.Application()
-    app.add_routes([web.post('/', run_handler)])
-    web.run_app(app)
-
-
-def create_run_handler(runner, project_id):
-    async def handle_run(request):
-        runner.run(project_id)
-        return web.Response(text='Done.\n')
-    return handle_run
