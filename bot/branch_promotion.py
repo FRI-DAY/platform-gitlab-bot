@@ -1,50 +1,24 @@
 import logging
 
-import gitlab
-
-from bot.config import load_from_yaml as load_config_from_yaml
-
 log = logging.getLogger(__name__)
 
 
 class BranchPromoter(object):
-    CONFIG_FILENAME = 'gitlab-bot.yml'
+    def __init__(self, project, config):
+        self.project = project
+        self.config = config
 
-    def __init__(self, gl):
-        self.gl = gl
+    def run(self):
+        for promote_config in self.config:
+            self.create_merge_request(promote_config.source,
+                                      promote_config.target,
+                                      promote_config.labels)
 
     def create_merge_request(
-            self, project_id, source_branch, target_branch, labels):
-
-        project = self.gl.projects.get(project_id)
-
-        log.info('Processing "{0}" with default branch "{1}"'.format(
-                 project.path_with_namespace, project.default_branch))
-
-        try:
-            config_file = project.files.get(file_path=self.CONFIG_FILENAME,
-                                            ref=project.default_branch)
-        except gitlab.GitlabGetError as e:
-            if e.response_code == 404:
-                log.info('{0}: "{1}" not found in '
-                         'default branch "{2}", stopping.'.format(
-                            project.path_with_namespace, self.CONFIG_FILENAME,
-                            project.default_branch))
-                return
-
-            raise e
-
-        load_config_from_yaml(config_file.decode())
-
-        # TODO use returned config
-
-        log.info('{0}: Using "{1}" found in '
-                 'default branch "{2}"'.format(
-                    project.path_with_namespace, self.CONFIG_FILENAME,
-                    project.default_branch))
+            self, source_branch, target_branch, labels):
 
         existing_mr = self.existing_merge_request(
-            project, source_branch, target_branch)
+            self.project, source_branch, target_branch)
         if existing_mr is not None:
             log.info('{0} -> {1}: Merge request already exists, stopping. '
                      'MR: {2}'.format(
@@ -52,14 +26,14 @@ class BranchPromoter(object):
             return
 
         branch_content_differs = self.does_branch_content_differ(
-            project, source_branch, target_branch)
+            self.project, source_branch, target_branch)
         if not branch_content_differs:
             log.info('{0} -> {1}: Branch contents are the same, stopping.'
                      .format(source_branch, target_branch))
             return
 
         mr_title = '⛵️ {0} to {1}'.format(source_branch, target_branch)
-        created_mr = project.mergerequests.create({
+        created_mr = self.project.mergerequests.create({
             'source_branch': source_branch,
             'target_branch': target_branch,
             'title': mr_title,

@@ -4,7 +4,7 @@ import click
 import gitlab
 from aiohttp import web
 
-from bot.branch_promotion import BranchPromoter
+from bot.runner import Runner
 
 log = logging.getLogger(__name__)
 
@@ -19,17 +19,9 @@ def main():
 @click.option(
     '--project-id', '-p', required=True, type=int,
     help='The numeric id of the GitLab project to work on.')
-@click.option(
-    '--source-branch', '-s', required=True,
-    help='The source branch to be merged into the target branch')
-@click.option(
-    '--target-branch', '-t', required=True, help='The target branch')
-@click.option('--label', 'labels', default=[], multiple=True,
-              help='Label to attach to created MRs (multiple allowed).')
 @click.option('--url', help='The GitLab instance URL.')
 @click.option('--private-token', help='A GitLab private access token.')
-def cli(server, project_id, source_branch, target_branch, labels,
-        url=None, private_token=None):
+def cli(server, project_id, url=None, private_token=None):
     """Diff two branches in a given project and output whether their content
     differs.
 
@@ -47,29 +39,24 @@ def cli(server, project_id, source_branch, target_branch, labels,
         log.info('Using python-gitlab config file')
         gl = gitlab.Gitlab.from_config()
 
-    promoter = BranchPromoter(gl)
+    runner = Runner(gl)
 
     if server:
-        run_server(promoter, project_id, source_branch, target_branch, labels)
+        run_server(runner, project_id)
     else:
-        promoter.create_merge_request(
-            project_id, source_branch, target_branch, labels)
+        runner.run(project_id)
 
 
-def run_server(promoter, project_id, source_branch, target_branch, labels):
-    promote_branch_handler = create_promote_branch_handler(
-        promoter, project_id, source_branch, target_branch, labels)
+def run_server(runner, project_id):
+    run_handler = create_run_handler(runner, project_id)
 
     app = web.Application()
-    app.add_routes([web.post('/', promote_branch_handler)])
+    app.add_routes([web.post('/', run_handler)])
     web.run_app(app)
 
 
-def create_promote_branch_handler(
-        promoter, project_id, source_branch, target_branch, labels):
-
-    async def handle_promote_branch(request):
-        promoter.create_merge_request(
-            project_id, source_branch, target_branch, labels)
-        return web.Response(text='Done.')
-    return handle_promote_branch
+def create_run_handler(runner, project_id):
+    async def handle_run(request):
+        runner.run(project_id)
+        return web.Response(text='Done.\n')
+    return handle_run
