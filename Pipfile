@@ -16,6 +16,8 @@ flake8-string-format = "*"
 python-gitlab = "*"
 click = "*"
 aiohttp = "*"
+pydantic = "*"
+pyyaml = "*"
 
 [requires]
 python_version = "3.7"
