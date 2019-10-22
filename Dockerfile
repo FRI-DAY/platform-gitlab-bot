@@ -8,6 +8,7 @@ ENV PYTHONUNBUFFERED 1
 WORKDIR /app
 
 ENTRYPOINT ["python", "/app/main.py"]
+CMD ["server"]
 
 # Install dependencies
 RUN pip install pipenv

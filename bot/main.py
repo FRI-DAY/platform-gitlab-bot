@@ -2,9 +2,9 @@ import logging
 
 import click
 import gitlab
-from aiohttp import web
 
 from bot.runner import Runner
+from bot.server import Server
 
 log = logging.getLogger(__name__)
 
@@ -13,22 +13,28 @@ def main():
     cli(auto_envvar_prefix='APP')
 
 
-@click.command()
-@click.option('--server/--no-server', '-d', default=False,
-              help='Run an HTTP server receiving webhooks')
-@click.option(
-    '--project-id', '-p', required=True, type=int,
-    help='The numeric id of the GitLab project to work on.')
+@click.group()
 @click.option('--url', help='The GitLab instance URL.')
 @click.option('--private-token', help='A GitLab private access token.')
-def cli(server, project_id, url=None, private_token=None):
-    """Diff two branches in a given project and output whether their content
-    differs.
+@click.pass_context
+def cli(ctx, url=None, private_token=None):
+    """
+    A GitLab bot. For now, it compares a source and a target branch and,
+    if their contents differ, it creates a merge request from the source to
+    the target branch. This is useful for promoting changes from one branch to
+    another, e.g. for managing configuration for different infrastructure
+    environments.
+
+    Configuration happens via a configuration file in the project's default
+    branch, called `gitlab-bot.yml`.
 
     In addition to command line flags, you can configure this tool via
     environment variables by using the long-form arguments, making them
     uppercase, prefixing them with `APP_`, and using underscores `_` as
     separators. E.g. `--private-token` becomes `APP_PRIVATE_TOKEN`.
+    When passing flags as environment vars for subcommands (e.g. server),
+    you need to add the command to the prefix (e.g. `APP_SERVER_).
+    E.g. `--webhook-auth-token` becomes `APP_SERVER_WEBHOOK_AUTH_TOKEN`.
     """
 
     logging.basicConfig(level=logging.INFO)
@@ -39,24 +45,28 @@ def cli(server, project_id, url=None, private_token=None):
         log.info('Using python-gitlab config file')
         gl = gitlab.Gitlab.from_config()
 
-    runner = Runner(gl)
-
-    if server:
-        run_server(runner, project_id)
-    else:
-        runner.run(project_id)
+    ctx.ensure_object(dict)
+    ctx.obj['gitlab'] = gl
 
 
-def run_server(runner, project_id):
-    run_handler = create_run_handler(runner, project_id)
+@cli.command()
+@click.option(
+    '--project-id', '-p', required=True, type=int,
+    help='The numeric id of the GitLab project to work on.')
+@click.pass_context
+def once(ctx, project_id):
+    """Run the bot tasks once on a specific GitLab project."""
+    runner = Runner(ctx.obj['gitlab'])
+    runner.run(project_id)
 
-    app = web.Application()
-    app.add_routes([web.post('/', run_handler)])
-    web.run_app(app)
 
-
-def create_run_handler(runner, project_id):
-    async def handle_run(request):
-        runner.run(project_id)
-        return web.Response(text='Done.\n')
-    return handle_run
+@cli.command()
+@click.option(
+    '--webhook-auth-token', required=True,
+    help='The token GitLab needs to send with Webhooks via X-Gitlab-Token. '
+         'Just use a random value.')
+@click.pass_context
+def server(ctx, webhook_auth_token):
+    """Run the bot as an HTTP server reacting to webhooks from GitLab."""
+    runner = Runner(ctx.obj['gitlab'])
+    Server(runner, webhook_auth_token).run()
