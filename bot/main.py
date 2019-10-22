@@ -32,6 +32,9 @@ def cli(ctx, url=None, private_token=None):
     environment variables by using the long-form arguments, making them
     uppercase, prefixing them with `APP_`, and using underscores `_` as
     separators. E.g. `--private-token` becomes `APP_PRIVATE_TOKEN`.
+    When passing flags as environment vars for subcommands (e.g. server),
+    you need to add the command to the prefix (e.g. `APP_SERVER_).
+    E.g. `--webhook-auth-token` becomes `APP_SERVER_WEBHOOK_AUTH_TOKEN`.
     """
 
     logging.basicConfig(level=logging.INFO)
@@ -58,8 +61,12 @@ def once(ctx, project_id):
 
 
 @cli.command()
+@click.option(
+    '--webhook-auth-token', required=True,
+    help='The token GitLab needs to send with Webhooks via X-Gitlab-Token. '
+         'Just use a random value.')
 @click.pass_context
-def server(ctx):
+def server(ctx, webhook_auth_token):
     """Run the bot as an HTTP server reacting to webhooks from GitLab."""
     runner = Runner(ctx.obj['gitlab'])
-    Server(runner).run()
+    Server(runner, webhook_auth_token).run()
