@@ -20,7 +20,8 @@ class Server(object):
             raise Exception('webhook_auth_token is empty')
 
         app = web.Application()
-        app.add_routes([web.post('/webhook', self.handle_webhook)])
+        app.add_routes([web.post('/webhook', self.handle_webhook),
+                        web.get('/healthz', self.handle_healthz)])
         web.run_app(app)
 
     async def handle_webhook(self, request):
@@ -45,6 +46,9 @@ class Server(object):
 
         self.runner.run(webhook_request.project_id)
         return web.Response(text='Done.\n')
+
+    async def handle_healthz(self, request):
+        return web.Response(text='OK')
 
 
 class GitLabWebhookRequest(BaseModel):
