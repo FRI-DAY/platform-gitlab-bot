@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 
 
 class Server(object):
-    MAX_REQUEST_BODY_SIZE = 128 * 1024
+    MAX_REQUEST_BODY_SIZE = 1024 * 1024  # 1 MiB
 
     def __init__(self, runner, webhook_auth_token):
         self.runner = runner
