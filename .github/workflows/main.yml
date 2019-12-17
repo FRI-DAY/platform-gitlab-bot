@@ -1,0 +1,37 @@
+name: CI
+
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-18.04
+    env:
+      TEST_IMAGE: gitlab-bot:test
+    steps:
+    - uses: actions/checkout@v1
+    - name: Build the test image
+      run: docker build --tag "$TEST_IMAGE" --target dev .
+    - name: Run tests
+      run: >
+        docker run
+        --entrypoint sh
+        "$TEST_IMAGE" -c 'pytest --flake8 --isort'
+
+  publish-image:
+    runs-on: ubuntu-18.04
+    if: github.ref == 'refs/heads/master'
+    needs: test
+    env:
+      FULL_IMAGE: fridevplatform/gitlab-bot
+      DOCKER_USERNAME: fridevplatformrobot
+    steps:
+      - uses: actions/checkout@v1
+      - name: Build the full image
+        run: docker build --tag "$FULL_IMAGE:${{ github.sha }}" .
+      - name: Push the full Docker image
+        run: |
+          echo "${{ secrets.DOCKER_PASSWORD }}" | \
+            docker login --username="$DOCKER_USERNAME" --password-stdin && \
+          docker tag "$FULL_IMAGE:${{ github.sha }}" "$FULL_IMAGE:latest" && \
+          docker push "$FULL_IMAGE:${{ github.sha }}" && \
+          docker push "$FULL_IMAGE:latest"
